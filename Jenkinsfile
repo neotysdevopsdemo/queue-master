@@ -14,11 +14,9 @@ pipeline {
     TAG_STAGING = "${TAG}-stagging:${VERSION}"
     NL_DT_TAG="app:${env.APP_NAME},environment:dev"
     QUEUEMASTER_ANOMALIEFILE="$WORKSPACE/monspec/queue-master_anomalieDection.json"
-    DYNATRACEID="${env.DT_ACCOUNTID}.live.dynatrace.com"
+    DYNATRACEID="https://${env.DT_ACCOUNTID}.live.dynatrace.com/"
     DYNATRACEAPIKEY="${env.DT_API_TOKEN}"
     NLAPIKEY="${env.NL_WEB_API_KEY}"
-    OUTPUTSANITYCHECK="$WORKSPACE/infrastructure/sanitycheck.json"
-    DYNATRACEPLUGINPATH="$WORKSPACE/lib/DynatraceIntegration-3.0.1-SNAPSHOT.jar"
     DOCKER_COMPOSE_TEMPLATE="$WORKSPACE/infrastructure/infrastructure/neoload/docker-compose.template"
     DOCKER_COMPOSE_LG_FILE = "$WORKSPACE/infrastructure/infrastructure/neoload/docker-compose-neoload.yml"
     BASICCHECKURI="/health"
@@ -37,7 +35,7 @@ pipeline {
     stage('Maven build') {
       steps {
 
-            sh "mvn -B clean package -DdynatraceId=$DYNATRACEID -DneoLoadWebAPIKey=$NLAPIKEY -DdynatraceApiKey=$DYNATRACEAPIKEY -Dtags=${NL_DT_TAG} -DoutPutReferenceFile=$OUTPUTSANITYCHECK -DcustomActionPath=$DYNATRACEPLUGINPATH -DjsonAnomalieDetectionFile=$QUEUEMASTER_ANOMALIEFILE"
+            sh "mvn -B clean package -DdynatraceURL=$DYNATRACEID -DneoLoadWebAPIKey=$NLAPIKEY -DdynatraceApiKey=$DYNATRACEAPIKEY -DdynatraceTags=${NL_DT_TAG} -DjsonAnomalieDetectionFile=$QUEUEMASTER_ANOMALIEFILE"
 
       }
 
@@ -85,36 +83,75 @@ pipeline {
 
                           }
 
-    stage('Run functional check in dev') {
-
-
-      steps {
-
-             sleep 90
-            sh "docker run --rm \
-                               -v $WORKSPACE/target/neoload/queuemaster_NeoLoad/:/neoload-project \
-                               -e NEOLOADWEB_TOKEN=$NLAPIKEY \
-                               -e TEST_RESULT_NAME=FuncCheck_queuemaster__${VERSION}_${BUILD_NUMBER} \
-                               -e SCENARIO_NAME=QueueMaster_Load \
-                               -e CONTROLLER_ZONE_ID=defaultzone \
-                               -e LG_ZONE_IDS=defaultzone:1 --user root\
-                               --network ${APP_NAME}\
-                                neotys/neoload-web-test-launcher:latest"
-
-          /*script {
-              neoloadRun executable: '/home/neoload/neoload/bin/NeoLoadCmd',
-                      project: "$WORKSPACE/target/neoload/queuemaster_NeoLoad/queuemaster_NeoLoad.nlp",
-                      testName: 'FuncCheck_queuemaster__${VERSION}_${BUILD_NUMBER}',
-                      testDescription: 'FuncCheck_queuemaster__${VERSION}_${BUILD_NUMBER}',
-                      commandLineOption: "-nlweb -L Population_BasicCheckTesting=$WORKSPACE/infrastructure/infrastructure/neoload/lg/remote.txt -L Population_Dynatrace_Integration=$WORKSPACE/infrastructure/infrastructure/neoload/lg/local.txt -nlwebToken $NLAPIKEY -variables carts_host=${env.APP_NAME},carts_port=80,basicPath=${BASICCHECKURI}",
-                      scenario: 'QueueMaster_Load', sharedLicense: [server: 'NeoLoad Demo License', duration: 2, vuCount: 200],
-                      trendGraphs: [
-                              [name: 'Limit test Health  API Response time', curve: ['BasicCheckTestingt>Actions>BasicCheck'], statistic: 'average'],
-                              'ErrorRate'
-                      ]
-          }*/
-
+     stage('NeoLoad Test')
+    {
+     agent {
+     docker {
+         image 'python:3-alpine'
+         reuseNode true
       }
+
+        }
+        stages {
+             stage('Get NeoLoad CLI') {
+                          steps {
+                            withEnv(["HOME=${env.WORKSPACE}"]) {
+
+                             sh '''
+                                  export PATH=~/.local/bin:$PATH
+                                  pip3 install neoload
+                                  neoload --version
+                              '''
+
+                            }
+                          }
+             }
+            stage('Run functional check in dev') {
+
+
+              steps {
+
+                     sleep 90
+
+
+                   sh """
+                             export PATH=~/.local/bin:$PATH
+                             neoload \
+                             login --workspace "Default Workspace" $NLAPIKEY \
+                             test-settings  --zone defaultzone --scenario QueueMaster_Load  use QueueMasterDynatrace \
+                             project --path  $WORKSPACE/target/neoload/queuemaster_NeoLoad/ upload
+                    """
+
+              }
+            }
+            stage('Run Test') {
+                      steps {
+                        withEnv(["HOME=${env.WORKSPACE}"]) {
+                          sh """
+                               export PATH=~/.local/bin:$PATH
+                               neoload run \
+                              --return-0 \
+                               QueueMasterDynatrace
+                             """
+                        }
+                      }
+             }
+             stage('Generate Test Report') {
+                      steps {
+                        withEnv(["HOME=${env.WORKSPACE}"]) {
+                            sh """
+                                 export PATH=~/.local/bin:$PATH
+                                 neoload test-results junitsla
+                               """
+                        }
+                      }
+                      post {
+                          always {
+                              junit 'junit-sla.xml'
+                          }
+                      }
+            }
+        }
     }
     stage('Mark artifact for staging namespace') {
         steps {
