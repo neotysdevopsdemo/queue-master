@@ -35,8 +35,15 @@ public class    QueueMasterLoadTest extends NeoLoadTest {
     @Override
     public void execute() {
 
-        createSimpleConstantLoadScenario("QueueMaster_Load","BasicCheckTesting",600,49,10,Optional.empty());
-        createSimpleConstantIterationScenario("DynatraceSanityCheck","BasicCheckTesting",15,1,0,Optional.empty());
-        createSanityCheckScenario();
+        try {
+            createSimpleConstantLoadScenario("QueueMaster_Load","BasicCheckTesting",600,49,10,Optional.empty());
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        try {
+            createSimpleConstantIterationScenario("DynatraceSanityCheck","BasicCheckTesting",15,1,0,Optional.empty());
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
     }
 }
