@@ -110,7 +110,7 @@ pipeline {
 
 
               steps {
-
+                 withEnv(["HOME=${env.WORKSPACE}"]) {
                      sleep 90
 
 
@@ -121,7 +121,7 @@ pipeline {
                              test-settings  --zone defaultzone --scenario QueueMaster_Load  use QueueMasterDynatrace \
                              project --path  $WORKSPACE/target/neoload/queuemaster_NeoLoad/ upload
                     """
-
+                  }
               }
             }
             stage('Run Test') {
