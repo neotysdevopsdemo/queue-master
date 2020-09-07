@@ -70,7 +70,7 @@ pipeline {
 
       }
     }
-   Start NeoLoad infrastructure') {
+   stage('Start NeoLoad infrastructure') {
 
                                steps {
                                           sh "cp -f ${DOCKER_COMPOSE_TEMPLATE} ${DOCKER_COMPOSE_LG_FILE}"
