@@ -83,6 +83,17 @@ pipeline {
 
                           }
 
+
+ stage('warmup the application')
+        {
+            steps{
+                sleep 20
+                script{
+                    sh "curl http://localhost:8084"
+                    sh "curl http://localhost:8084"
+                }
+            }
+        }
      stage('NeoLoad Test')
     {
      agent {
